@@ -1,0 +1,120 @@
+name: Paperclip Server Version Check
+
+# The Paperclip server is pinned, not floating (see docs/development/architecture.md).
+# That makes builds reproducible but means nothing tells us when upstream moves
+# on — so this asks, daily.
+#
+# The job stays green when we are behind and files an issue instead. A scheduled
+# job that goes red every day for weeks is noise people learn to ignore, which
+# is the opposite of what this is for.
+
+on:
+  schedule:
+    - cron: "0 7 * * *" # 07:00 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: server-version-check
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Compare the pinned server against npm
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Compare versions
+        id: compare
+        run: |
+          set -euo pipefail
+          result="$(make outdated-json)"
+          echo "$result"
+          {
+            echo "pinned=$(node -p "JSON.parse(process.argv[1]).pinned" "$result")"
+            echo "latest=$(node -p "JSON.parse(process.argv[1]).latest ?? ''" "$result")"
+            echo "behind=$(node -p "JSON.parse(process.argv[1]).behind" "$result")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Report to the job summary
+        run: |
+          {
+            echo "### Paperclip server"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| pinned | \`${{ steps.compare.outputs.pinned }}\` |"
+            echo "| latest on npm | \`${{ steps.compare.outputs.latest || 'unreachable' }}\` |"
+            echo "| behind | ${{ steps.compare.outputs.behind }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # A single rolling issue, reopened and re-commented rather than duplicated,
+      # so a long-running gap does not turn into a wall of identical issues.
+      - name: Open or update the tracking issue
+        if: steps.compare.outputs.behind == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PINNED: ${{ steps.compare.outputs.pinned }}
+          LATEST: ${{ steps.compare.outputs.latest }}
+        run: |
+          set -euo pipefail
+          title="Paperclip server is behind: $PINNED → $LATEST"
+          marker="<!-- server-version-check -->"
+
+          body="$marker
+          The bundled Paperclip server is pinned to \`$PINNED\`; npm now has \`$LATEST\`.
+
+          The pin is deliberate — a desktop build ships the exact server it was
+          tested against — so this needs a human to bump and re-verify:
+
+          \`\`\`sh
+          pnpm add -D @paperclipai/server@$LATEST
+          make clean-bundle && make verify && make dist
+          \`\`\`
+
+          Check the adapter dependencies too: \`adapters/*/package.json\` pins
+          \`@paperclipai/adapter-*\` to the same version, and they must move together
+          or the plugin loader hands the adapter types from a different release
+          than the server runs.
+
+          _Filed automatically by \`.github/workflows/server-version-check.yml\`._"
+
+          existing="$(gh issue list --state all --search "$marker in:body" --json number,state,title --limit 1)"
+          number="$(node -p "(JSON.parse(process.argv[1])[0]||{}).number ?? ''" "$existing")"
+
+          if [ -z "$number" ]; then
+            gh issue create --title "$title" --body "$body" --label dependencies || \
+              gh issue create --title "$title" --body "$body"
+            exit 0
+          fi
+
+          state="$(node -p "(JSON.parse(process.argv[1])[0]||{}).state ?? ''" "$existing")"
+          current="$(node -p "(JSON.parse(process.argv[1])[0]||{}).title ?? ''" "$existing")"
+
+          [ "$state" = "CLOSED" ] && gh issue reopen "$number"
+          # Only comment when the target moved; otherwise this would post daily.
+          if [ "$current" != "$title" ]; then
+            gh issue edit "$number" --title "$title" --body "$body"
+            gh issue comment "$number" --body "Upstream moved again: now \`$LATEST\`."
+          fi
+
+      - name: Close the tracking issue once we catch up
+        if: steps.compare.outputs.behind == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          existing="$(gh issue list --state open --search "<!-- server-version-check --> in:body" --json number --limit 1)"
+          number="$(node -p "(JSON.parse(process.argv[1])[0]||{}).number ?? ''" "$existing")"
+          if [ -n "$number" ]; then
+            gh issue close "$number" --comment "The pinned server matches the latest release on npm."
+          fi

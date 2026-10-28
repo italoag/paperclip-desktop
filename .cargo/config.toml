@@ -1,0 +1,16 @@
+# Cargo resolves crates through the corporate JFrog Artifactory mirror.
+#
+# No credentials live here. Authentication comes from the environment:
+#   CARGO_REGISTRIES_ARTIFACTORY_TOKEN="Bearer <token>"
+# In CI that value is injected from a repository secret; locally it comes from
+# the developer's shell (or from the credential-provider configured in their
+# global ~/.cargo/config.toml, which takes precedence when present).
+
+[registries.artifactory]
+index = "sparse+https://gluonlatam.jfrog.io/artifactory/api/cargo/cib-cargo-crates-io/index/"
+
+[source.crates-io]
+replace-with = "artifactory"
+
+[source.artifactory]
+registry = "sparse+https://gluonlatam.jfrog.io/artifactory/api/cargo/cib-cargo-crates-io/index/"

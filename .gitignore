@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/server-bundle/
+build/server-staging/
+build/node-bin/
+build/upstream-clone/
+docs/development/paperclip/
+docs/mockups/chooser-variations.html
+adapters/*/dist/
+
+# Local checkout of the upstream Paperclip monorepo, kept for reference while
+# working on adapters. Not part of this project.
+/paperclip/
+
+# Packaged artifacts and the updater manifest
+release/
+
+# Tauri / Rust
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+.agents/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local

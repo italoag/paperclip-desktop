@@ -1,0 +1,1213 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Paperclip – Remote Connection Mode Mockup</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    height: 100vh;
+    background: #0a0a0a;
+    color: #e4e4e7;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    overflow: hidden;
+    padding-top: 42px;
+  }
+
+  /* ── Shared chrome ── */
+
+  .window {
+    width: 480px;
+    min-height: 380px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+  }
+
+  .logo {
+    width: 56px;
+    height: 56px;
+    margin-bottom: 20px;
+    opacity: 0;
+    animation: fadeIn 0.5s ease-out forwards;
+  }
+
+  .app-title {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin-bottom: 32px;
+    opacity: 0;
+    animation: fadeIn 0.5s ease-out 0.15s forwards;
+  }
+
+  /* ── View container ── */
+
+  .view {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    opacity: 0;
+    animation: fadeIn 0.35s ease-out forwards;
+  }
+  .view.active { display: flex; }
+
+  /* ── Launch chooser (§6.1) ── */
+
+  .chooser-cards {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+
+  .chooser-card {
+    width: 200px;
+    padding: 20px 16px;
+    border: 1px solid #27272a;
+    border-radius: 10px;
+    cursor: pointer;
+    text-align: center;
+    transition: border-color 0.2s, background 0.2s;
+    background: transparent;
+    color: #e4e4e7;
+  }
+  .chooser-card:hover {
+    border-color: #52525b;
+    background: #18181b;
+  }
+  .chooser-card.selected {
+    border-color: #a1a1aa;
+    background: #1c1c1f;
+  }
+
+  .chooser-card .card-icon {
+    width: 32px;
+    height: 32px;
+    margin: 0 auto 12px;
+  }
+  .chooser-card .card-label {
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+  .chooser-card .card-desc {
+    font-size: 11px;
+    color: #71717a;
+    line-height: 1.4;
+  }
+  .chooser-card .badge {
+    display: inline-block;
+    font-size: 10px;
+    background: #27272a;
+    color: #a1a1aa;
+    padding: 2px 7px;
+    border-radius: 4px;
+    margin-bottom: 10px;
+  }
+
+  .remember-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #71717a;
+    margin-bottom: 20px;
+  }
+  .remember-row input[type="checkbox"] {
+    accent-color: #a1a1aa;
+  }
+
+  /* ── Buttons ── */
+
+  .btn {
+    padding: 8px 20px;
+    border-radius: 6px;
+    border: 1px solid #27272a;
+    background: transparent;
+    color: #e4e4e7;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    font-family: inherit;
+  }
+  .btn:hover { background: #18181b; border-color: #52525b; }
+  .btn.primary {
+    background: #e4e4e7;
+    color: #0a0a0a;
+    border-color: #e4e4e7;
+    font-weight: 500;
+  }
+  .btn.primary:hover { background: #d4d4d8; border-color: #d4d4d8; }
+  .btn.danger { color: #f87171; border-color: #7f1d1d; }
+  .btn.danger:hover { background: #1c1215; border-color: #991b1b; }
+  .btn:disabled { opacity: 0.35; pointer-events: none; }
+
+  .btn-row {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+  }
+
+  /* ── Remote connect form (§6.2) ── */
+
+  .form-group {
+    width: 340px;
+    margin-bottom: 16px;
+    text-align: left;
+  }
+  .form-group label {
+    display: block;
+    font-size: 12px;
+    color: #71717a;
+    margin-bottom: 6px;
+  }
+  .form-group input {
+    width: 100%;
+    padding: 9px 12px;
+    border-radius: 6px;
+    border: 1px solid #27272a;
+    background: #18181b;
+    color: #e4e4e7;
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .form-group input::placeholder { color: #3f3f46; }
+  .form-group input:focus { border-color: #52525b; }
+  .form-group .field-hint {
+    font-size: 11px;
+    color: #52525b;
+    margin-top: 4px;
+  }
+  .form-group .field-error {
+    font-size: 11px;
+    color: #f87171;
+    margin-top: 4px;
+    display: none;
+  }
+  .form-group .field-success {
+    font-size: 11px;
+    color: #4ade80;
+    margin-top: 4px;
+    display: none;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 8px;
+    margin-bottom: 16px;
+  }
+
+  .back-link {
+    font-size: 12px;
+    color: #52525b;
+    cursor: pointer;
+    transition: color 0.15s;
+    margin-top: 12px;
+  }
+  .back-link:hover { color: #a1a1aa; }
+
+  /* ── Requirements box ── */
+
+  .requirements-box {
+    width: 340px;
+    border: 1px solid #27272a;
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 16px;
+    background: #141417;
+    text-align: left;
+  }
+  .requirements-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: #a1a1aa;
+    margin-bottom: 8px;
+  }
+  .requirements-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: #71717a;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .requirements-list div::before {
+    content: "• ";
+    color: #a1a1aa;
+  }
+
+  /* ── Status badge (connection test) ── */
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    margin-bottom: 16px;
+  }
+  .status-badge.healthy { background: #052e16; color: #4ade80; }
+  .status-badge.warning { background: #2b2110; color: #fbbf24; }
+  .status-badge.unreachable { background: #2a1215; color: #f87171; }
+  .status-badge.testing { background: #1c1c1f; color: #a1a1aa; }
+  .status-badge .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  /* ── Status card (verification result) ── */
+
+  .status-card {
+    width: 340px;
+    display: none;
+    border: 1px solid #27272a;
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 14px;
+    background: #141417;
+    text-align: left;
+  }
+  .status-card.active { display: block; }
+  .status-title {
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+  .status-detail {
+    color: #71717a;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .status-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid #27272a;
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 10px;
+    color: #a1a1aa;
+    background: transparent;
+  }
+
+  /* ── Saved connections list (§6.3) ── */
+
+  .connections-list {
+    width: 400px;
+    margin-bottom: 16px;
+  }
+
+  .conn-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid #27272a;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .conn-item:hover {
+    border-color: #52525b;
+    background: #18181b;
+  }
+  .conn-item.active-conn {
+    border-color: #4ade80;
+    background: #0a1a0f;
+  }
+
+  .conn-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    background: #27272a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .conn-icon svg { width: 16px; height: 16px; }
+
+  .conn-info { flex: 1; min-width: 0; }
+  .conn-name {
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .conn-url {
+    font-size: 11px;
+    color: #52525b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .conn-meta {
+    font-size: 10px;
+    color: #3f3f46;
+    margin-top: 2px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .conn-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .conn-actions button {
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: #52525b;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s, background 0.15s;
+  }
+  .conn-actions button:hover { color: #e4e4e7; background: #27272a; }
+  .conn-actions button.delete-btn:hover { color: #f87171; background: #1c1215; }
+
+  .conn-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .conn-status-dot.healthy { background: #4ade80; }
+  .conn-status-dot.auth-required { background: #fbbf24; }
+  .conn-status-dot.unreachable { background: #f87171; }
+  .conn-status-dot.unsupported { background: #9ca3af; }
+  .conn-status-dot.unknown { background: #3f3f46; }
+
+  .empty-state {
+    text-align: center;
+    padding: 32px 0;
+    color: #3f3f46;
+    font-size: 13px;
+  }
+
+  /* ── Section headers ── */
+
+  .section-title {
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 16px;
+    color: #a1a1aa;
+  }
+
+  .section-subtitle {
+    font-size: 12px;
+    color: #52525b;
+    margin-bottom: 20px;
+  }
+
+  /* ── Connecting animation ── */
+
+  .connecting-view {
+    text-align: center;
+  }
+  .connecting-spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid #27272a;
+    border-top-color: #a1a1aa;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin: 0 auto 16px;
+  }
+  .connecting-label {
+    font-size: 13px;
+    color: #a1a1aa;
+    margin-bottom: 4px;
+  }
+  .connecting-url {
+    font-size: 11px;
+    color: #52525b;
+  }
+
+  /* ── Error state (§10) ── */
+
+  .error-box {
+    width: 340px;
+    padding: 16px;
+    border: 1px solid #7f1d1d;
+    border-radius: 8px;
+    background: #1c1215;
+    margin-bottom: 16px;
+    text-align: center;
+  }
+  .error-box .error-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: #f87171;
+    margin-bottom: 4px;
+  }
+  .error-box .error-detail {
+    font-size: 11px;
+    color: #71717a;
+  }
+
+  /* ── Edit modal overlay ── */
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .modal-overlay.active { display: flex; }
+
+  .modal {
+    width: 380px;
+    background: #18181b;
+    border: 1px solid #27272a;
+    border-radius: 12px;
+    padding: 24px;
+    animation: fadeIn 0.2s ease-out forwards;
+  }
+  .modal .modal-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 20px;
+  }
+  .modal .form-group { width: 100%; }
+  .modal .form-actions { justify-content: flex-end; }
+
+  /* ── Progress bar ── */
+
+  .progress-track {
+    width: 240px;
+    height: 3px;
+    background: #27272a;
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+  .progress-bar {
+    height: 100%;
+    width: 0%;
+    background: #a1a1aa;
+    border-radius: 2px;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* ── Steps ── */
+
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 280px;
+  }
+  .step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: #52525b;
+    transition: color 0.3s ease;
+  }
+  .step.active { color: #e4e4e7; }
+  .step.done { color: #71717a; }
+  .step-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .step-icon .pending { width: 6px; height: 6px; border-radius: 50%; background: #3f3f46; }
+  .step-icon .spinner { width: 14px; height: 14px; border: 2px solid #3f3f46; border-top-color: #a1a1aa; border-radius: 50%; animation: spin 0.7s linear infinite; }
+  .step-icon .check { color: #71717a; font-size: 14px; line-height: 1; }
+  .step-detail {
+    display: block;
+    font-size: 11px;
+    color: #52525b;
+    margin-top: 2px;
+  }
+
+  /* ── Nav tabs ── */
+
+  .nav-tabs {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    gap: 0;
+    background: #18181b;
+    border-bottom: 1px solid #27272a;
+    z-index: 200;
+    padding: 0 12px;
+  }
+  .nav-tab {
+    padding: 10px 16px;
+    font-size: 12px;
+    color: #52525b;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+    font-family: inherit;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+  }
+  .nav-tab:hover { color: #a1a1aa; }
+  .nav-tab.active { color: #e4e4e7; border-bottom-color: #a1a1aa; }
+
+  .nav-hint {
+    margin-left: auto;
+    align-self: center;
+    font-size: 11px;
+    color: #3f3f46;
+    padding-right: 8px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Mockup navigation bar ── -->
+<div class="nav-tabs">
+  <button class="nav-tab active" onclick="showView('chooser')">Launch Chooser</button>
+  <button class="nav-tab" onclick="showView('remote-form')">Remote Connect</button>
+  <button class="nav-tab" onclick="showView('connecting')">Connecting</button>
+  <button class="nav-tab" onclick="showView('error')">Error State</button>
+  <button class="nav-tab" onclick="showView('saved')">Saved Connections</button>
+  <button class="nav-tab" onclick="showView('local-boot')">Local Boot</button>
+  <span class="nav-hint">Interactive mockup — revised remote trust model</span>
+</div>
+
+<div class="window">
+
+  <!-- Logo + title (always visible) -->
+  <div class="logo">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/></svg>
+  </div>
+  <div class="app-title">Paperclip</div>
+
+  <!-- ────────────────────────────────────────── -->
+  <!-- VIEW: Launch Chooser (§6.1)                -->
+  <!-- ────────────────────────────────────────── -->
+  <div class="view active" id="view-chooser">
+    <div class="section-subtitle">How would you like to start?</div>
+
+    <div class="chooser-cards">
+      <div class="chooser-card selected" id="card-local" onclick="selectCard('local')">
+        <span class="badge">Recommended</span>
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        </div>
+        <div class="card-label">Run Local</div>
+        <div class="card-desc">Start the embedded Paperclip server on this machine with the current trusted local flow.</div>
+      </div>
+
+      <div class="chooser-card" id="card-remote" onclick="selectCard('remote')">
+        <div class="card-icon" style="margin-top: 22px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        </div>
+        <div class="card-label">Connect Remote</div>
+        <div class="card-desc">Connect only to verified remote Paperclip instances that expose upstream authenticated mode.</div>
+      </div>
+    </div>
+
+    <div class="remember-row">
+      <input type="checkbox" id="rememberChoice">
+      <label for="rememberChoice">Remember my choice and don't ask again</label>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn primary" onclick="chooserContinue()">Continue</button>
+    </div>
+  </div>
+
+  <!-- ────────────────────────────────────────── -->
+  <!-- VIEW: Remote Connect Form (§6.2)           -->
+  <!-- ────────────────────────────────────────── -->
+  <div class="view" id="view-remote-form">
+    <div class="section-title">Connect to Remote Paperclip</div>
+
+    <div class="requirements-box">
+      <div class="requirements-title">Remote requirements</div>
+      <div class="requirements-list">
+        <div>Remote mode is for verified Paperclip servers, not arbitrary web pages.</div>
+        <div>Shared or networked remotes should run upstream authenticated mode.</div>
+        <div>The remote server owns sign-in. Desktop does not store remote passwords.</div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="remoteUrl">Remote URL</label>
+      <input type="text" id="remoteUrl" placeholder="https://paperclip.example.com" value="https://paperclip-host.tailnet.ts.net">
+      <div class="field-hint">Desktop verifies /api/health and auth readiness before loading a remote origin.</div>
+      <div class="field-error" id="urlError">Enter a valid http(s) URL.</div>
+      <div class="field-success" id="urlSuccess">Verified authenticated Paperclip remote detected.</div>
+    </div>
+
+    <div class="form-group">
+      <label for="displayName">Display name <span style="color:#3f3f46">(optional)</span></label>
+      <input type="text" id="displayName" placeholder="e.g. Home Server">
+    </div>
+
+    <div id="testStatus" style="min-height: 24px;"></div>
+    <div class="status-card" id="statusCard">
+      <div class="status-title" id="statusTitle">Waiting for verification</div>
+      <div class="status-detail" id="statusDetail">Run verification to inspect deployment mode, auth readiness, and sign-in state.</div>
+      <div class="status-meta" id="statusMeta"></div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn" onclick="verifyRemote()">Verify Remote</button>
+      <button class="btn" id="signinBtn" onclick="continueToSignIn()" disabled>Continue to Sign-In</button>
+      <button class="btn primary" id="saveBtn" onclick="connectAndSave()" disabled>Connect &amp; Save</button>
+    </div>
+
+    <div class="back-link" onclick="showView('chooser')">&#8592; Back to chooser</div>
+  </div>
+
+  <!-- ────────────────────────────────────────── -->
+  <!-- VIEW: Connecting (animation)               -->
+  <!-- ────────────────────────────────────────── -->
+  <div class="view" id="view-connecting">
+    <div class="connecting-view">
+      <div class="connecting-spinner"></div>
+      <div class="connecting-label" id="connectingLabel">Opening verified remote...</div>
+      <div class="connecting-url" id="connectingUrl">https://paperclip-host.tailnet.ts.net</div>
+    </div>
+  </div>
+
+  <!-- ────────────────────────────────────────── -->
+  <!-- VIEW: Error State (§10)                    -->
+  <!-- ────────────────────────────────────────── -->
+  <div class="view" id="view-error">
+    <div class="error-box">
+      <div class="error-title" id="errorTitle">Remote not eligible</div>
+      <div class="error-detail" id="errorDetail">This host responded, but it is either not Paperclip or is configured in upstream local_trusted mode.</div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" onclick="verifyRemote()">Retry Verification</button>
+      <button class="btn" onclick="showView('remote-form')">Edit URL</button>
+      <button class="btn primary" onclick="showView('local-boot')">Switch to Local</button>
+    </div>
+
+    <div class="back-link" onclick="showView('chooser')">&#8592; Back to chooser</div>
+  </div>
+
+  <!-- ────────────────────────────────────────── -->
+  <!-- VIEW: Saved Connections (§6.3 CRUD)        -->
+  <!-- ────────────────────────────────────────── -->
+  <div class="view" id="view-saved">
+    <div class="section-title">Saved Connections</div>
+
+    <div class="connections-list" id="connectionsList"></div>
+
+    <div class="btn-row">
+      <button class="btn" onclick="openAddModal()">+ Add Connection</button>
+      <button class="btn" onclick="showView('chooser')">Back</button>
+    </div>
+  </div>
+
+  <!-- ────────────────────────────────────────── -->
+  <!-- VIEW: Local Boot (splash screen replay)    -->
+  <!-- ────────────────────────────────────────── -->
+  <div class="view" id="view-local-boot">
+    <div class="progress-track">
+      <div class="progress-bar" id="localProgress"></div>
+    </div>
+
+    <div class="steps" id="localSteps">
+      <div class="step" data-key="init">
+        <div class="step-icon"><div class="pending"></div></div>
+        <div><div class="step-label">Initializing</div></div>
+      </div>
+      <div class="step" data-key="database">
+        <div class="step-icon"><div class="pending"></div></div>
+        <div><div class="step-label">Starting database</div></div>
+      </div>
+      <div class="step" data-key="server">
+        <div class="step-icon"><div class="pending"></div></div>
+        <div><div class="step-label">Starting server</div></div>
+      </div>
+      <div class="step" data-key="ready">
+        <div class="step-icon"><div class="pending"></div></div>
+        <div><div class="step-label">Loading interface</div></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /.window -->
+
+<!-- ── Edit / Add modal ── -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <div class="modal-title" id="modalTitle">Add Connection</div>
+
+    <div class="form-group">
+      <label for="modalName">Name</label>
+      <input type="text" id="modalName" placeholder="Connection name">
+    </div>
+    <div class="form-group">
+      <label for="modalUrl">URL</label>
+      <input type="text" id="modalUrl" placeholder="https://paperclip.example.com">
+      <div class="field-hint">Remote profiles are verified before use and never store raw passwords.</div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn primary" onclick="saveModal()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let selectedCard = "local";
+let editingId = null;
+let nextId = 5;
+let lastVerification = null;
+
+let connections = [
+  {
+    id: "1",
+    name: "Local",
+    mode: "local_embedded",
+    url: null,
+    status: "healthy",
+    capability: "Local embedded",
+    lastConnected: "2 min ago",
+    active: true,
+  },
+  {
+    id: "2",
+    name: "Home Server",
+    mode: "remote_existing",
+    url: "https://paperclip-host.tailnet.ts.net",
+    status: "auth-required",
+    capability: "Authenticated / sign-in required",
+    lastConnected: "1 hr ago",
+    active: false,
+  },
+  {
+    id: "3",
+    name: "Dev VM",
+    mode: "remote_existing",
+    url: "https://dev.paperclip.internal",
+    status: "healthy",
+    capability: "Authenticated / session active",
+    lastConnected: "Yesterday",
+    active: false,
+  },
+  {
+    id: "4",
+    name: "Legacy Box",
+    mode: "remote_existing",
+    url: "http://192.168.1.50:3100",
+    status: "unsupported",
+    capability: "Blocked: local_trusted",
+    lastConnected: null,
+    active: false,
+  },
+];
+
+// ── View switching ──
+
+function showView(name) {
+  document.querySelectorAll('.view').forEach(v => { v.classList.remove('active'); v.style.opacity = '0'; });
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+
+  const viewEl = document.getElementById('view-' + name);
+  if (viewEl) {
+    viewEl.classList.add('active');
+    void viewEl.offsetWidth;
+    viewEl.style.animation = 'none';
+    void viewEl.offsetWidth;
+    viewEl.style.animation = 'fadeIn 0.35s ease-out forwards';
+  }
+
+  const tabMap = { chooser: 0, 'remote-form': 1, connecting: 2, error: 3, saved: 4, 'local-boot': 5 };
+  const tabs = document.querySelectorAll('.nav-tab');
+  if (tabs[tabMap[name]]) tabs[tabMap[name]].classList.add('active');
+
+  if (name === 'saved') renderConnections();
+  if (name === 'local-boot') runLocalBoot();
+}
+
+// ── Launch chooser ──
+
+function selectCard(type) {
+  selectedCard = type;
+  document.getElementById('card-local').classList.toggle('selected', type === 'local');
+  document.getElementById('card-remote').classList.toggle('selected', type === 'remote');
+}
+
+function chooserContinue() {
+  showView(selectedCard === 'remote' ? 'remote-form' : 'local-boot');
+}
+
+// ── Remote connect form ──
+
+function validateUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function resetVerificationUi() {
+  document.getElementById("urlError").style.display = "none";
+  document.getElementById("urlSuccess").style.display = "none";
+  document.getElementById("testStatus").innerHTML = "";
+  document.getElementById("statusCard").classList.remove("active");
+  document.getElementById("signinBtn").disabled = true;
+  document.getElementById("saveBtn").disabled = true;
+}
+
+function renderStatus(result) {
+  const testStatus = document.getElementById("testStatus");
+  const card = document.getElementById("statusCard");
+  const title = document.getElementById("statusTitle");
+  const detail = document.getElementById("statusDetail");
+  const meta = document.getElementById("statusMeta");
+  const success = document.getElementById("urlSuccess");
+  const signinBtn = document.getElementById("signinBtn");
+  const saveBtn = document.getElementById("saveBtn");
+
+  let badgeClass = "warning";
+  if (result.kind === "healthy") badgeClass = "healthy";
+  if (result.kind === "auth-required") badgeClass = "warning";
+  if (result.kind === "unsupported" || result.kind === "not-paperclip" || result.kind === "unreachable") badgeClass = "unreachable";
+
+  testStatus.innerHTML = '<div class="status-badge ' + badgeClass + '"><div class="dot"></div>' + result.badge + "</div>";
+  card.classList.add("active");
+  title.textContent = result.title;
+  detail.textContent = result.detail;
+  meta.innerHTML = result.meta.map(function(item) { return '<span class="pill">' + item + "</span>"; }).join("");
+
+  success.style.display = result.kind === "healthy" || result.kind === "auth-required" ? "block" : "none";
+  signinBtn.disabled = !(result.kind === "healthy" || result.kind === "auth-required");
+  saveBtn.disabled = !(result.kind === "healthy" || result.kind === "auth-required");
+}
+
+function simulateVerification(url) {
+  const lower = url.toLowerCase();
+
+  if (lower.includes("tailnet") || lower.includes("staging") || lower.includes("paperclip")) {
+    if (lower.includes("dev.")) {
+      return {
+        kind: "healthy",
+        badge: "Authenticated Paperclip detected",
+        title: "Verified remote ready",
+        detail: "The host looks like a Paperclip instance in authenticated mode, and an active session was found.",
+        meta: ["deploymentMode=authenticated", "authReady=true", "session=signed_in"],
+      };
+    }
+
+    return {
+      kind: "auth-required",
+      badge: "Verified remote - sign-in required",
+      title: "Verified remote, no active session",
+      detail: "The host looks like an authenticated Paperclip instance. Continue to the remote sign-in flow instead of entering credentials in Desktop.",
+      meta: ["deploymentMode=authenticated", "authReady=true", "session=signed_out"],
+    };
+  }
+
+  if (lower.includes("localhost") || lower.includes("127.0.0.1") || lower.includes("192.168.")) {
+    return {
+      kind: "unsupported",
+      badge: "Unsupported remote deployment",
+      title: "Paperclip detected but not eligible",
+      detail: "This looks like a local_trusted style deployment. Remote Desktop mode should only target authenticated upstream Paperclip remotes.",
+      meta: ["deploymentMode=local_trusted", "remoteMode=blocked"],
+    };
+  }
+
+  if (lower.includes("example") || lower.includes("google")) {
+    return {
+      kind: "not-paperclip",
+      badge: "Host reachable, not Paperclip",
+      title: "Non-Paperclip endpoint",
+      detail: "The host responded, but it does not present the Paperclip health and auth shape expected by remote mode.",
+      meta: ["paperclipDetected=false"],
+    };
+  }
+
+  return {
+    kind: "unreachable",
+    badge: "Host unreachable",
+    title: "Could not verify remote",
+    detail: "The host did not respond during preflight, or TLS validation failed before a Paperclip health probe completed.",
+    meta: ["status=unreachable"],
+  };
+}
+
+function verifyRemote() {
+  const url = document.getElementById("remoteUrl").value.trim();
+  resetVerificationUi();
+
+  if (!validateUrl(url)) {
+    document.getElementById("urlError").style.display = "block";
+    return;
+  }
+
+  document.getElementById("testStatus").innerHTML = '<div class="status-badge testing"><div class="dot"></div>Verifying remote...</div>';
+
+  setTimeout(function() {
+    lastVerification = simulateVerification(url);
+    renderStatus(lastVerification);
+  }, 700);
+}
+
+function continueToSignIn() {
+  if (!lastVerification || (lastVerification.kind !== "healthy" && lastVerification.kind !== "auth-required")) return;
+  document.getElementById("connectingLabel").textContent =
+    lastVerification.kind === "auth-required" ? "Opening remote sign-in..." : "Opening verified remote...";
+  document.getElementById("connectingUrl").textContent = document.getElementById("remoteUrl").value.trim();
+  showView("connecting");
+}
+
+function connectAndSave() {
+  const url = document.getElementById("remoteUrl").value.trim();
+  if (!validateUrl(url) || !lastVerification || (lastVerification.kind !== "healthy" && lastVerification.kind !== "auth-required")) {
+    document.getElementById("urlError").style.display = "block";
+    return;
+  }
+
+  const name = document.getElementById("displayName").value.trim() || new URL(url).hostname;
+  connections.push({
+    id: String(nextId++),
+    name: name,
+    mode: "remote_existing",
+    url: url,
+    status: lastVerification.kind === "healthy" ? "healthy" : "auth-required",
+    capability: lastVerification.kind === "healthy" ? "Authenticated / session active" : "Authenticated / sign-in required",
+    lastConnected: "Just now",
+    active: false,
+  });
+
+  continueToSignIn();
+}
+
+// ── Saved connections CRUD ──
+
+function renderConnections() {
+  const list = document.getElementById('connectionsList');
+
+  if (connections.length === 0) {
+    list.innerHTML = '<div class="empty-state">No saved connections yet.</div>';
+    return;
+  }
+
+  list.innerHTML = connections.map(function(c) {
+    var icon = c.mode === 'local_embedded'
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>';
+
+    var lastConn = c.lastConnected ? '<span class="pill">Last connected: ' + c.lastConnected + '</span>' : '';
+
+    return '<div class="conn-item ' + (c.active ? 'active-conn' : '') + '" ondblclick="quickConnect(\'' + c.id + '\')">' +
+      '<div class="conn-icon">' + icon + '</div>' +
+      '<div class="conn-info">' +
+        '<div class="conn-name">' + c.name + '</div>' +
+        '<div class="conn-url">' + (c.url || 'Embedded local server') + '</div>' +
+        '<div class="conn-meta"><span class="pill">' + c.capability + '</span>' + lastConn + '</div>' +
+      '</div>' +
+      '<div class="conn-status-dot ' + c.status + '"></div>' +
+      '<div class="conn-actions" onclick="event.stopPropagation()">' +
+        '<button title="Edit" onclick="openEditModal(\'' + c.id + '\')">&#9998;</button>' +
+        '<button title="Duplicate" onclick="duplicateConn(\'' + c.id + '\')">&#10697;</button>' +
+        '<button class="delete-btn" title="Delete" onclick="deleteConn(\'' + c.id + '\')">&#10005;</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function openAddModal() {
+  editingId = null;
+  document.getElementById('modalTitle').textContent = 'Add Connection';
+  document.getElementById('modalName').value = '';
+  document.getElementById('modalUrl').value = '';
+  document.getElementById('editModal').classList.add('active');
+}
+
+function openEditModal(id) {
+  var c = connections.find(function(x) { return x.id === id; });
+  if (!c) return;
+  editingId = id;
+  document.getElementById('modalTitle').textContent = 'Edit Connection';
+  document.getElementById('modalName').value = c.name;
+  document.getElementById('modalUrl').value = c.url || '';
+  document.getElementById('editModal').classList.add('active');
+}
+
+function closeModal() {
+  document.getElementById('editModal').classList.remove('active');
+  editingId = null;
+}
+
+function saveModal() {
+  var name = document.getElementById('modalName').value.trim();
+  var url = document.getElementById('modalUrl').value.trim();
+
+  if (!name) return;
+
+  if (editingId) {
+    var c = connections.find(function(x) { return x.id === editingId; });
+    if (c) {
+      c.name = name;
+      if (url) c.url = url;
+    }
+  } else {
+    connections.push({
+      id: String(nextId++),
+      name: name,
+      mode: url ? 'remote_existing' : 'local_embedded',
+      url: url || null,
+      status: url ? 'auth-required' : 'healthy',
+      capability: url ? 'Pending verification' : 'Local embedded',
+      lastConnected: null,
+      active: false,
+    });
+  }
+
+  closeModal();
+  renderConnections();
+}
+
+function duplicateConn(id) {
+  var c = connections.find(function(x) { return x.id === id; });
+  if (!c) return;
+  connections.push({
+    id: String(nextId++),
+    name: c.name + ' (copy)',
+    mode: c.mode,
+    url: c.url,
+    status: c.status,
+    capability: c.capability,
+    active: false,
+    lastConnected: null,
+  });
+  renderConnections();
+}
+
+function deleteConn(id) {
+  connections = connections.filter(function(x) { return x.id !== id; });
+  renderConnections();
+}
+
+function quickConnect(id) {
+  var c = connections.find(function(x) { return x.id === id; });
+  if (!c) return;
+  connections.forEach(function(x) { x.active = false; });
+  c.active = true;
+  c.lastConnected = 'Just now';
+
+  if (c.mode === 'local_embedded') {
+    showView('local-boot');
+    return;
+  }
+
+  document.getElementById('remoteUrl').value = c.url;
+  document.getElementById('displayName').value = c.name;
+  var result = simulateVerification(c.url);
+  lastVerification = result;
+  renderStatus(result);
+
+  if (result.kind === 'healthy' || result.kind === 'auth-required') {
+    continueToSignIn();
+    return;
+  }
+
+  document.getElementById('errorTitle').textContent = result.title;
+  document.getElementById('errorDetail').textContent = result.detail;
+  showView('error');
+}
+
+// ── Local boot (splash replay) ──
+
+function runLocalBoot() {
+  var steps = document.querySelectorAll('#localSteps .step');
+  var bar = document.getElementById('localProgress');
+  var order = ['Preparing environment...', 'Launching embedded PostgreSQL...', 'Waiting for server...', 'Loading the UI...'];
+  var values = [12, 38, 67, 100];
+  var delays = [0, 700, 1800, 2900];
+
+  bar.style.width = '0%';
+  steps.forEach(function(step) {
+    step.classList.remove('active', 'done');
+    step.querySelector('.step-icon').innerHTML = '<div class="pending"></div>';
+    var detail = step.querySelector('.step-detail');
+    if (detail) detail.remove();
+  });
+
+  delays.forEach(function(delay, index) {
+    setTimeout(function() {
+      steps.forEach(function(step, stepIndex) {
+        if (stepIndex < index) {
+          step.classList.remove('active');
+          step.classList.add('done');
+          step.querySelector('.step-icon').innerHTML = '<span class="check">&#10003;</span>';
+        } else if (stepIndex === index) {
+          step.classList.remove('done');
+          step.classList.add('active');
+          step.querySelector('.step-icon').innerHTML = '<div class="spinner"></div>';
+          var detail = step.querySelector('.step-detail');
+          if (!detail) {
+            detail = document.createElement('div');
+            detail.className = 'step-detail';
+            step.querySelector('.step-label').parentElement.appendChild(detail);
+          }
+          detail.textContent = order[index];
+        }
+      });
+      bar.style.width = values[index] + '%';
+    }, delay);
+  });
+}
+
+// ── Init ──
+
+renderConnections();
+</script>
+
+</body>
+</html>

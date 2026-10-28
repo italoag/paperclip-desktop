@@ -1,0 +1,35 @@
+{
+  "name": "paperclip-adapter-devin",
+  "version": "0.1.0",
+  "description": "Run Devin CLI as a Paperclip agent, through its Agent Client Protocol server",
+  "type": "module",
+  "license": "MIT",
+  "paperclip": {
+    "adapterUiParser": "1.0.0"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./server": "./dist/server/index.js",
+    "./ui-parser": "./dist/ui-parser.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "refresh-models": "node scripts/refresh-models.mjs"
+  },
+  "dependencies": {
+    "@paperclipai/adapter-utils": "2026.817.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "paperclip-desktop",
+  "version": "3.2.11",
+  "private": true,
+  "description": "Paperclip desktop application \u2014 Tauri shell for the Paperclip server",
+  "author": {
+    "name": "Italo A. G."
+  },
+  "homepage": "https://github.com/italoag/paperclip-desktop",
+  "scripts": {
+    "dev": "cargo tauri dev --config src-tauri/tauri.macos-arm64.conf.json",
+    "check": "cd src-tauri && cargo clippy --all-targets -- -D warnings && cargo fmt --check",
+    "test": "cd src-tauri && cargo test",
+    "prepare-server": "node scripts/prepare-server.mjs",
+    "build-ui": "node scripts/build-ui.mjs",
+    "sign-nested": "node scripts/sign-nested-binaries.mjs",
+    "bundle:mac:arm64": "cargo tauri build --target aarch64-apple-darwin --config src-tauri/tauri.macos-arm64.conf.json",
+    "bundle:mac:x64": "cargo tauri build --target x86_64-apple-darwin --config src-tauri/tauri.macos-x64.conf.json",
+    "dist:mac": "pnpm prepare-server && pnpm build-ui && pnpm bundle-adapters && pnpm bundle:mac:arm64 && pnpm bundle:mac:x64",
+    "release:manifest": "node scripts/prepare-updater-manifest.mjs",
+    "smoke:mac:packaged": "node scripts/smoke-test-packaged-macos.mjs",
+    "bundle-adapters": "node scripts/bundle-adapters.mjs",
+    "test:adapters": "pnpm --dir adapters/paperclip-adapter-devin test",
+    "test:scripts": "node --test scripts/__tests__/*.test.mjs",
+    "acu:audit": "node scripts/acu-audit.mjs"
+  },
+  "devDependencies": {
+    "@paperclipai/server": "2026.817.0"
+  }
+}

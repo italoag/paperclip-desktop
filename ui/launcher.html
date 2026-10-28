@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Paperclip</title>
+    <link rel="stylesheet" href="./launcher.css" />
+  </head>
+  <body>
+<div class="window">
+  <button class="window-close" id="windowCloseBtn" aria-label="Close" data-action="closeLauncherSheet">&times;</button>
+  <div class="logo">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/></svg>
+  </div>
+  <div class="app-title">Paperclip</div>
+
+  <div class="view active" id="view-chooser">
+    <div class="tab-bar" role="tablist">
+      <button class="tab-btn active" id="tab-btn-local" role="tab" tabindex="0" data-action="switchTab" data-arg="local">Local</button>
+      <button class="tab-btn" id="tab-btn-remote" role="tab" tabindex="-1" data-action="switchTab" data-arg="remote">Remote</button>
+    </div>
+
+    <div class="tab-content active" id="tab-local" role="tabpanel">
+      <div class="local-hero-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      </div>
+      <div class="local-hero-title">Run Local Server</div>
+      <div class="local-hero-desc">Start the embedded Paperclip server on this machine with trusted local access.</div>
+      <button class="btn primary" style="min-width:180px;" data-action="launchLocal">Launch</button>
+      <div class="remember-row" style="margin-top:20px;margin-bottom:0;">
+        <input type="checkbox" id="rememberLocal">
+        <label for="rememberLocal">Always start local on launch</label>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-remote" role="tabpanel">
+      <div class="tab-conn-list" id="tabRemoteList"></div>
+      <div class="btn-row" style="gap:8px;">
+        <button class="btn" data-action="openAddRemoteFromChooser">+ Add Remote Connection</button>
+      </div>
+      <div class="remember-row" style="margin-top:16px;margin-bottom:0;">
+        <input type="checkbox" id="rememberRemoteChooser">
+        <label for="rememberRemoteChooser">Reconnect to the selected remote on launch</label>
+      </div>
+    </div>
+  </div>
+
+  <div class="view" id="view-remote-form">
+    <div class="section-title">Connect to Remote</div>
+    <div class="section-subtitle">Verify the remote before continuing. HTTP connections require explicit confirmation.</div>
+
+    <div class="step-panel" id="stepPanelUrl">
+      <div class="step-panel-head"><span>Remote URL</span></div>
+      <div class="step-panel-body">
+        <div class="form-group">
+          <input type="text" id="remoteUrl" placeholder="https://paperclip.example.com">
+          <div class="field-hint">Desktop verifies /api/health and auth readiness. HTTPS recommended; HTTP requires acknowledgment.</div>
+          <div class="field-error" id="urlError">Enter a valid remote URL.</div>
+          <div class="field-success" id="urlSuccess">Verified authenticated Paperclip remote detected.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step-panel" id="stepPanelVerify">
+      <div class="step-panel-head">
+        <span>Verification</span>
+        <div class="head-right">
+          <div id="testStatus"></div>
+          <span class="verify-info" id="verifyInfo" tabindex="0" aria-label="Verification details">i<span class="verify-tooltip"><span class="tip-detail" id="statusDetail">Run verification to inspect deployment mode, auth readiness, and sign-in state.</span><span class="tip-meta" id="statusTipMeta"></span></span></span>
+        </div>
+      </div>
+      <div class="step-panel-body">
+        <div class="status-card" id="statusCard" hidden>
+          <div class="status-title" id="statusTitle" hidden>Waiting for verification</div>
+          <div class="status-meta" id="statusMeta" hidden></div>
+        </div>
+        <div class="status-card warning-card" id="httpWarningCard">
+          <div class="warning-header">
+            <div class="status-badge warning"><div class="dot"></div>Insecure HTTP</div>
+            <span class="warning-info" tabindex="0" aria-label="More information">?<span class="warning-tooltip" id="httpWarningDetail">This URL disables TLS. Only continue if you trust the network path to this remote. Connect and save stay disabled until you acknowledge.</span></span>
+          </div>
+          <div class="remember-row">
+            <input type="checkbox" id="allowInsecureHttp">
+            <label for="allowInsecureHttp">I understand the risk and want to allow this HTTP connection</label>
+          </div>
+        </div>
+        <div class="step-placeholder" id="verifyPlaceholder">Run verify to inspect deployment mode, auth readiness, and sign-in state.</div>
+      </div>
+    </div>
+
+    <div class="step-panel" id="stepPanelSave">
+      <div class="step-panel-head"><span>Save &amp; connect</span></div>
+      <div class="step-panel-body">
+        <div class="form-group">
+          <label for="displayName">Display name <span style="color:#3f3f46">(optional)</span></label>
+          <input type="text" id="displayName" placeholder="e.g. Home Server">
+        </div>
+        <div class="remember-row" style="margin-bottom:0;">
+          <input type="checkbox" id="rememberRemoteForm">
+          <label for="rememberRemoteForm">Reconnect to this remote on launch</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn" id="verifyBtn" data-action="verifyRemote">Verify Remote</button>
+      <button class="btn primary" id="signinBtn" data-action="continueToSignIn" disabled>Continue to Sign-In</button>
+      <button class="btn" id="saveBtn" data-action="connectAndSave" disabled>Connect &amp; Save</button>
+    </div>
+
+    <div class="back-link" data-action="showChooserRemoteTab">&larr; Back to connections</div>
+  </div>
+
+  <div class="view" id="view-connecting">
+    <div class="connecting-view">
+      <div class="connecting-spinner"></div>
+      <div class="connecting-label" id="connectingLabel">Opening verified remote...</div>
+      <div class="connecting-url" id="connectingUrl"></div>
+    </div>
+  </div>
+
+  <div class="view" id="view-error">
+    <div class="error-box">
+      <div class="error-title" id="errorTitle">Remote not eligible</div>
+      <div class="error-detail" id="errorDetail">This host responded, but it is either not Paperclip or is configured in upstream local_trusted mode.</div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" id="errorRetryBtn" data-action="retryLastAction">Retry</button>
+      <button class="btn" id="errorTryDifferentBtn" data-action="showView" data-arg="remote-form">Try Different Connection</button>
+      <button class="btn" id="errorSwitchRemoteBtn" data-action="showChooserRemoteTab" style="display:none;">Switch to Remote</button>
+      <button class="btn primary" id="errorSwitchLocalBtn" data-action="switchToLocal">Switch to Local</button>
+    </div>
+
+    <div class="back-link" data-action="showChooser">&larr; Back to chooser</div>
+  </div>
+
+  <div class="view" id="view-saved">
+    <div class="section-title">Saved Connections</div>
+    <div class="connections-list" id="connectionsList"></div>
+
+    <div class="btn-row">
+      <button class="btn" data-action="openAddModal">+ Add Connection</button>
+      <button class="btn" data-action="showChooser">Back</button>
+    </div>
+  </div>
+
+  <div class="view" id="view-local-boot">
+    <div class="progress-track">
+      <div class="progress-bar" id="localProgress"></div>
+    </div>
+
+    <div class="steps" id="localSteps">
+      <div class="step" id="step-init" data-key="init">
+        <div class="step-icon"><div class="pending"></div></div>
+        <div><div class="step-label">Initializing</div></div>
+      </div>
+      <div class="step" id="step-database" data-key="database">
+        <div class="step-icon"><div class="pending"></div></div>
+        <div><div class="step-label">Starting database</div></div>
+      </div>
+      <div class="step" id="step-server" data-key="server">
+        <div class="step-icon"><div class="pending"></div></div>
+        <div><div class="step-label">Starting server</div></div>
+      </div>
+      <div class="step" id="step-ready" data-key="ready">
+        <div class="step-icon"><div class="pending"></div></div>
+        <div><div class="step-label">Loading interface</div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="modal-overlay" id="editModal" data-backdrop-action="closeModal">
+  <div class="modal">
+    <div class="modal-title" id="modalTitle">Add Connection</div>
+
+    <div class="form-group">
+      <label for="modalName">Name</label>
+      <input type="text" id="modalName" placeholder="Connection name">
+    </div>
+    <div class="form-group">
+      <label for="modalUrl">URL</label>
+      <input type="text" id="modalUrl" placeholder="https://paperclip.example.com">
+      <div class="field-hint">Remote profiles are verified before use and never store raw passwords. HTTP profiles require an explicit insecure-connection acknowledgment.</div>
+      <div class="field-error" id="modalError">Enter a valid remote URL.</div>
+    </div>
+
+    <div class="status-card warning-card" id="modalHttpWarningCard">
+      <div class="warning-header">
+        <div class="status-badge warning"><div class="dot"></div>Insecure HTTP</div>
+        <span class="warning-info" tabindex="0" aria-label="More information">?<span class="warning-tooltip" id="modalHttpWarningDetail">Saving this URL means future reconnects can reuse plaintext HTTP unless you switch it back to HTTPS. Use only when you trust the network path.</span></span>
+      </div>
+      <div class="remember-row">
+        <input type="checkbox" id="modalAllowInsecureHttp">
+        <label for="modalAllowInsecureHttp">I understand the risk and want to save this HTTP connection</label>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn" data-action="closeModal">Cancel</button>
+      <button class="btn primary" data-action="saveModal">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="deleteModal" data-backdrop-action="cancelDelete">
+  <div class="modal">
+    <div class="modal-title">Delete connection?</div>
+    <div style="font-size:13px;color:#a1a1aa;margin-bottom:20px;line-height:1.5;">
+      "<span id="deleteProfileName"></span>" will be removed. Session data for this connection will also be cleared. This cannot be undone.
+    </div>
+    <div class="form-actions" style="justify-content:flex-end;">
+      <button class="btn" id="deleteCancelBtn" data-action="cancelDelete">Cancel</button>
+      <button class="btn danger" data-action="confirmDelete">Delete</button>
+    </div>
+  </div>
+</div>
+
+    <!-- bridge.js must come first: launcher.js captures window.paperclipLauncher
+         on its very first line. -->
+    <script src="./bridge.js"></script>
+    <script src="./launcher.js"></script>
+  </body>
+</html>

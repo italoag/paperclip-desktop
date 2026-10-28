@@ -1,0 +1,6 @@
+allowBuilds:
+  esbuild: true
+# pnpm 11 no longer reads the `pnpm` field from package.json.
+# esbuild is vitest's bundler and needs its postinstall to fetch its binary.
+onlyBuiltDependencies:
+  - esbuild

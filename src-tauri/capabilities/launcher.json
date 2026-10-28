@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "launcher",
+  "description": "Permissions granted to the internal launcher window only. The main window renders untrusted remote content and is deliberately excluded.",
+  "windows": ["launcher"],
+  "permissions": ["core:default", "dialog:default", "opener:allow-open-url"]
+}

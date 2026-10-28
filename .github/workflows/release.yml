@@ -1,0 +1,206 @@
+name: Release Desktop
+
+# macOS only, deliberately. The Windows/Linux jobs were removed with the Tauri
+# migration: the server payload is mapped through `bundle.macOS.files`, which is
+# the only mechanism that preserves the `.dylib` soname symlinks the embedded
+# PostgreSQL needs. Restoring the other platforms means adding a
+# `bundle.resources` path plus symlink restoration — tracked, not done.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to build
+        required: false
+        default: master
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-mac:
+    name: Build signed macOS artifacts
+    runs-on: macos-latest
+    environment: release
+    env:
+      RELEASE_REF: ${{ github.event.inputs.ref || 'master' }}
+      # `.cargo/config.toml` in the repo points at the JFrog mirror; this is the
+      # credential for it. Cargo reads it because the checked-in config, unlike a
+      # developer's global one, declares no credential-provider.
+      CARGO_REGISTRIES_ARTIFACTORY_TOKEN: ${{ secrets.CARGO_REGISTRIES_ARTIFACTORY_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_REF }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install the Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Verify the shell
+        run: pnpm test && pnpm check
+
+      - name: Stage the Paperclip server and UI
+        run: pnpm prepare-server && pnpm build-ui
+
+      - name: Prepare Apple signing assets
+        env:
+          APPLE_CODESIGN_IDENTITY: ${{ secrets.APPLE_CODESIGN_IDENTITY }}
+          MAC_CERTIFICATE_P12_BASE64: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 }}
+          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+
+          KEYCHAIN_PATH="$RUNNER_TEMP/paperclip-signing.keychain-db"
+          CERT_PATH="$RUNNER_TEMP/paperclip-signing.p12"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+          export KEYCHAIN_PATH CERT_PATH
+
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+
+          python - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+
+          raw = "".join(os.environ["MAC_CERTIFICATE_P12_BASE64"].split())
+          Path(os.environ["CERT_PATH"]).write_bytes(base64.b64decode(raw))
+          PY
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$MAC_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+          security default-keychain -d user -s "$KEYCHAIN_PATH"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+          {
+            echo "KEYCHAIN_PATH=$KEYCHAIN_PATH"
+            echo "CERT_PATH=$CERT_PATH"
+          } >> "$GITHUB_ENV"
+
+      # Each bundle runs `sign-nested-binaries.mjs` as its beforeBundleCommand,
+      # so every Mach-O under app-server is signed before Tauri copies it in and
+      # signs the .app around it — inside out, as Apple requires.
+      - name: Bundle (arm64)
+        env:
+          APPLE_CODESIGN_IDENTITY: ${{ secrets.APPLE_CODESIGN_IDENTITY }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_CODESIGN_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Tauri notarises inline when these are present, replacing the manual
+          # submit/poll workflows the Electron pipeline needed. Without them the
+          # build still succeeds, just un-notarised.
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm bundle:mac:arm64
+
+      - name: Bundle (x64)
+        env:
+          APPLE_CODESIGN_IDENTITY: ${{ secrets.APPLE_CODESIGN_IDENTITY }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_CODESIGN_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Tauri notarises inline when these are present, replacing the manual
+          # submit/poll workflows the Electron pipeline needed. Without them the
+          # build still succeeds, just un-notarised.
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm bundle:mac:x64
+
+      - name: Verify the signatures
+        run: |
+          set -euo pipefail
+          for triple in aarch64-apple-darwin x86_64-apple-darwin; do
+            app="src-tauri/target/$triple/release/bundle/macos/Paperclip Desktop.app"
+            echo "--- $triple"
+            codesign --verify --deep --strict --verbose=2 "$app"
+            # Spot-check that the nested payload really carries signatures.
+            find "$app/Contents/Resources/app-server" -name '*.dylib' -type f | head -5 \
+              | while read -r lib; do codesign --verify --verbose=1 "$lib"; done
+          done
+
+      - name: Build the updater manifest
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          node scripts/prepare-updater-manifest.mjs \
+            --version "$VERSION" \
+            --bundle-dir src-tauri/target/aarch64-apple-darwin/release/bundle \
+            --bundle-dir src-tauri/target/x86_64-apple-darwin/release/bundle \
+            --output-dir release/updater
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-mac
+          path: release/updater
+          if-no-files-found: error
+
+      - name: Clean up Apple signing assets
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -n "${KEYCHAIN_PATH:-}" ]; then
+            security delete-keychain "$KEYCHAIN_PATH" || true
+          fi
+          rm -f "${CERT_PATH:-}"
+
+  publish-release:
+    name: Publish GitHub release
+    if: startsWith(github.event.inputs.ref, 'v') || startsWith(github.event.inputs.ref, 'refs/tags/v')
+    needs: build-mac
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-mac
+          path: dist-artifacts
+
+      - name: Create or update the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.inputs.ref }}"
+          tag="${tag#refs/tags/}"
+
+          mapfile -d '' files < <(find dist-artifacts -type f -print0 | sort -z)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No release artifacts were produced." >&2
+            exit 1
+          fi
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${files[@]}" --clobber
+          else
+            gh release create "$tag" "${files[@]}" --title "$tag" --verify-tag
+          fi
