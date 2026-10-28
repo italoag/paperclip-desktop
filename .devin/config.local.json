@@ -73,7 +73,9 @@
       "Exec(HOME=/tmp/devin-fake-home XDG_CONFIG_HOME=/tmp/devin-fake-home/.config devin models)",
       "Exec(npx tsc)",
       "Exec(PAPERCLIP_DEVIN_COMMAND=/nonexistent-devin node)",
-      "Exec(git)"
+      "Exec(git)",
+      "Exec(ruby)",
+      "Exec(LATEST=2026.1023.0 PINNED=2026.817.0 DEFAULT=master BUMP_BRANCH=automation/paperclip-server-bump PR_NUMBER= bash)"
     ]
   }
 }

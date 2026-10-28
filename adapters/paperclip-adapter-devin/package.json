@@ -22,7 +22,7 @@
     "refresh-models": "node scripts/refresh-models.mjs"
   },
   "dependencies": {
-    "@paperclipai/adapter-utils": "2026.817.0"
+    "@paperclipai/adapter-utils": "2026.1023.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

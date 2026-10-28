@@ -417,3 +417,67 @@ This document corresponds to the release automation split introduced after the s
 - prebuilt app notarization and repackaging helpers
 
 If that design changes materially, update this file rather than relying on tribal memory.
+
+---
+
+## Addendum: automated server-bump pipeline (2026-10)
+
+The sections above describe the Electron-era split and are kept as history.
+The Tauri pipeline now automates the loop that used to be manual — detecting
+that the bundled `@paperclipai/server` fell behind npm, bumping it, and
+releasing — while keeping the pin and the "ship only a tested server"
+guarantee that motivated it.
+
+### Design
+
+1. **`server-version-check.yml` (daily)** — compares the pin to npm latest.
+   When behind, it force-rebases `automation/paperclip-server-bump` onto the
+   default branch, runs `scripts/bump-paperclip-server.mjs`, refreshes
+   lockfiles with `--lockfile-only`, and upserts a single rolling PR. The
+   bump always moves three things together:
+   `devDependencies["@paperclipai/server"]`, every `@paperclipai/*` pin in
+   `adapters/*/package.json`, and the desktop patch `version` — the updater
+   compares the app version, so without the last one no client sees the
+   build. The version-drift issue stays as a fallback paper trail and is
+   closed automatically once the pin catches up.
+2. **`ci.yml`** — runs `make verify` on every pull request. The bump PR
+   auto-merges only when this is green; red CI leaves the PR open for a
+   human, which is exactly the old manual path.
+3. **`bump-release-tag.yml`** — on a merge to `master` whose head commit is
+   a server bump (`chore: bump @paperclipai/server …`), creates
+   `v<desktop-version>` via the API and dispatches `release.yml`. The
+   dispatch is deliberate: `GITHUB_TOKEN` pushes suppress workflow events,
+   so trusting the tag push to trigger the build would silently do nothing.
+4. **`release.yml`** — now also triggers on `push: tags: v*` and runs
+   `smoke-test-packaged-macos.mjs` between signing and publish. The smoke
+   test boots the signed `.app` against a throwaway home and requires the
+   bundled server to report healthy: a server that compiles but does not
+   boot never reaches `latest.json`.
+
+### Required repository setup
+
+- A `BUMP_TOKEN` secret (PAT or GitHub App token). With the default
+  `GITHUB_TOKEN`, pushes and PRs do not trigger other workflows; the
+  workflow degrades gracefully (CI is dispatched on the branch explicitly),
+  but a real token is the reliable path.
+- "Allow auto-merge" enabled in the repository settings.
+- The `CI` check required in the default-branch protection rules — without
+  it, auto-merge does not wait for `make verify`.
+
+### Failure modes and recovery
+
+- **Bump PR red**: nothing merges; push fixes to
+  `automation/paperclip-server-bump` or close the PR (it re-opens next run).
+- **Smoke test fails in release**: `latest.json` is never published; fix and
+  re-dispatch `release.yml` on the same tag.
+- **Bad release already published**: re-run `release.yml` pointed at the
+  previous good tag, or hand-edit `latest.json` in the `latest` release to
+  the previous version — the manifest is the rollback button; clients skip
+  anything not newer than what they run.
+
+### Guardrails kept
+
+- Automation only bumps; a human still owns majors, upstream breaking
+  changes, and any bump whose CI fails.
+- The pin stays: every build ships exactly the server `make verify` ran
+  against — automation changed who presses the button, not what ships.

@@ -177,8 +177,9 @@ outdated: server-version ## Compare the pinned server against the latest on npm
 		printf "  %-24s %s\n" "latest on npm" "$$latest"; \
 		if [ "$$latest" = "$$pinned" ]; then echo; echo "  Up to date."; \
 		else echo; echo "  Behind. To upgrade:"; \
-		     echo "    pnpm add -D @paperclipai/server@$$latest"; \
-		     echo "    make clean-bundle && make verify && make dist"; fi; \
+		     echo "    node scripts/bump-paperclip-server.mjs $$latest && pnpm install"; \
+		     echo "    make clean-bundle && make verify && make dist"; \
+		     echo "  (or let the daily server-version-check workflow open the bump PR)"; fi; \
 	fi
 
 acu-audit: ## Reconcile the ACU ledger against Devin's own totals

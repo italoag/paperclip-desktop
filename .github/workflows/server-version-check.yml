@@ -1,120 +1,221 @@
 name: Paperclip Server Version Check
 
-# The Paperclip server is pinned, not floating (see docs/development/architecture.md).
-# That makes builds reproducible but means nothing tells us when upstream moves
-# on — so this asks, daily.
+# Daily drift detector between the pinned @paperclipai/server and npm latest.
+# When behind, it no longer just opens an issue — it maintains ONE rolling
+# bump PR (branch `automation/paperclip-server-bump`) that moves the server
+# pin, every adapter @paperclipai/* pin, and the desktop patch version
+# together, then enables auto-merge. The CI workflow's `make verify` must go
+# green before that merge can happen, so an incompatible server can never
+# reach a release through this path.
 #
-# The job stays green when we are behind and files an issue instead. A scheduled
-# job that goes red every day for weeks is noise people learn to ignore, which
-# is the opposite of what this is for.
+# REPOSITORY SETUP this workflow depends on:
+#   1. A `BUMP_TOKEN` secret (a PAT or GitHub App token). PRs and pushes made
+#      with the default GITHUB_TOKEN do NOT trigger other workflows, so the
+#      bump PR would never run CI and auto-merge would wait forever.
+#   2. "Allow auto-merge" enabled in the repository settings.
+#   3. The `CI` check required in the default-branch protection rules, so
+#      auto-merge actually gates on `make verify`.
 
 on:
   schedule:
-    - cron: "0 7 * * *" # 07:00 UTC daily
+    - cron: "0 7 * * *" # daily at 07:00 UTC
   workflow_dispatch:
 
 permissions:
-  contents: read
-  issues: write
+  contents: write # push the bump branch
+  pull-requests: write # open/update/close the rolling PR
+  issues: write # maintain the tracking issue
+  actions: write # trigger CI on the bump branch explicitly
 
 concurrency:
   group: server-version-check
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   check:
-    name: Compare the pinned server against npm
     runs-on: ubuntu-latest
+    env:
+      # BUMP_TOKEN (PAT/App) first so the bump PR's checks actually run;
+      # GITHUB_TOKEN works as a degraded fallback (CI is dispatched manually
+      # below, which does not require a PAT).
+      GH_TOKEN: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+      BUMP_BRANCH: automation/paperclip-server-bump
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Persist whichever credential will push the branch. With BUMP_TOKEN
+          # the push triggers the PR-open CI run by itself.
+          token: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
 
-      - name: Compare versions
-        id: compare
+      - name: Compare the pin against npm latest
+        id: versions
         run: |
           set -euo pipefail
-          result="$(make outdated-json)"
-          echo "$result"
-          {
-            echo "pinned=$(node -p "JSON.parse(process.argv[1]).pinned" "$result")"
-            echo "latest=$(node -p "JSON.parse(process.argv[1]).latest ?? ''" "$result")"
-            echo "behind=$(node -p "JSON.parse(process.argv[1]).behind" "$result")"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Report to the job summary
-        run: |
-          {
-            echo "### Paperclip server"
-            echo
-            echo "| | |"
-            echo "|---|---|"
-            echo "| pinned | \`${{ steps.compare.outputs.pinned }}\` |"
-            echo "| latest on npm | \`${{ steps.compare.outputs.latest || 'unreachable' }}\` |"
-            echo "| behind | ${{ steps.compare.outputs.behind }} |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # A single rolling issue, reopened and re-commented rather than duplicated,
-      # so a long-running gap does not turn into a wall of identical issues.
-      - name: Open or update the tracking issue
-        if: steps.compare.outputs.behind == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PINNED: ${{ steps.compare.outputs.pinned }}
-          LATEST: ${{ steps.compare.outputs.latest }}
-        run: |
-          set -euo pipefail
-          title="Paperclip server is behind: $PINNED → $LATEST"
-          marker="<!-- server-version-check -->"
-
-          body="$marker
-          The bundled Paperclip server is pinned to \`$PINNED\`; npm now has \`$LATEST\`.
-
-          The pin is deliberate — a desktop build ships the exact server it was
-          tested against — so this needs a human to bump and re-verify:
-
-          \`\`\`sh
-          pnpm add -D @paperclipai/server@$LATEST
-          make clean-bundle && make verify && make dist
-          \`\`\`
-
-          Check the adapter dependencies too: \`adapters/*/package.json\` pins
-          \`@paperclipai/adapter-*\` to the same version, and they must move together
-          or the plugin loader hands the adapter types from a different release
-          than the server runs.
-
-          _Filed automatically by \`.github/workflows/server-version-check.yml\`._"
-
-          existing="$(gh issue list --state all --search "$marker in:body" --json number,state,title --limit 1)"
-          number="$(node -p "(JSON.parse(process.argv[1])[0]||{}).number ?? ''" "$existing")"
-
-          if [ -z "$number" ]; then
-            gh issue create --title "$title" --body "$body" --label dependencies || \
-              gh issue create --title "$title" --body "$body"
-            exit 0
+          PINNED=$(node -p 'require("./package.json").devDependencies["@paperclipai/server"]')
+          LATEST=$(npm view @paperclipai/server version)
+          echo "pinned=$PINNED" >> "$GITHUB_OUTPUT"
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          if [ "$PINNED" = "$LATEST" ]; then
+            echo "behind=false" >> "$GITHUB_OUTPUT"
+            echo "Pinned server is at npm latest: $PINNED"
+          else
+            echo "behind=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Pinned server $PINNED is behind npm latest $LATEST"
           fi
 
-          state="$(node -p "(JSON.parse(process.argv[1])[0]||{}).state ?? ''" "$existing")"
-          current="$(node -p "(JSON.parse(process.argv[1])[0]||{}).title ?? ''" "$existing")"
-
-          [ "$state" = "CLOSED" ] && gh issue reopen "$number"
-          # Only comment when the target moved; otherwise this would post daily.
-          if [ "$current" != "$title" ]; then
-            gh issue edit "$number" --title "$title" --body "$body"
-            gh issue comment "$number" --body "Upstream moved again: now \`$LATEST\`."
-          fi
-
-      - name: Close the tracking issue once we catch up
-        if: steps.compare.outputs.behind == 'false'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Apply the version bumps
+        id: bump
+        if: steps.versions.outputs.behind == 'true'
         run: |
           set -euo pipefail
-          existing="$(gh issue list --state open --search "<!-- server-version-check --> in:body" --json number --limit 1)"
-          number="$(node -p "(JSON.parse(process.argv[1])[0]||{}).number ?? ''" "$existing")"
-          if [ -n "$number" ]; then
-            gh issue close "$number" --comment "The pinned server matches the latest release on npm."
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Rebase the bump branch onto the current default branch so the
+          # rolling PR only ever carries the bump commit.
+          git checkout -B "$BUMP_BRANCH" "origin/${{ github.event.repository.default_branch }}"
+
+          node scripts/bump-paperclip-server.mjs "${{ steps.versions.outputs.latest }}"
+
+          # Refresh every lockfile without installing: avoids the 850 MB
+          # download and the ignored-builds gate, and keeps the diff small.
+          pnpm install --lockfile-only
+          for dir in adapters/*/; do
+            if [ -f "${dir}pnpm-lock.yaml" ]; then
+              pnpm --dir "${dir%/}" install --lockfile-only
+            fi
+          done
+
+          git add package.json pnpm-lock.yaml 'adapters/*/package.json' 'adapters/*/pnpm-lock.yaml'
+          git commit -m "chore: bump @paperclipai/server to ${{ steps.versions.outputs.latest }}" \
+            -m "Automated bump from ${{ steps.versions.outputs.pinned }}. Server pin, adapter @paperclipai/* pins and the desktop patch version move together — the updater compares the app version, not the server's."
+          git push --force-with-lease origin "$BUMP_BRANCH"
+
+      - name: Open or update the rolling bump PR
+        id: pr
+        if: steps.versions.outputs.behind == 'true' && steps.bump.outcome == 'success'
+        run: |
+          set -euo pipefail
+          LATEST="${{ steps.versions.outputs.latest }}"
+          PINNED="${{ steps.versions.outputs.pinned }}"
+          DEFAULT="${{ github.event.repository.default_branch }}"
+
+          PR_NUMBER=$(gh pr list --head "$BUMP_BRANCH" --base "$DEFAULT" --state open \
+            --json number --jq '.[0].number // ""')
+
+          BODY=$(cat <<EOF
+          ## What this does
+
+          The pinned \`@paperclipai/server\` drifted from npm latest:
+
+          | | version |
+          |---|---|
+          | pinned | \`$PINNED\` |
+          | latest | \`$LATEST\` |
+
+          The bumps move together, like the manual procedure always required:
+
+          - \`devDependencies["@paperclipai/server"]\` — the version bundled by \`prepare-server.mjs\`
+          - every \`@paperclipai/*\` pin in \`adapters/*/package.json\`
+          - the desktop \`version\` patch-bumped — \`tauri-plugin-updater\` compares the app
+            version, so without this no installed client would ever see the new server
+          - all lockfiles regenerated with \`--lockfile-only\`
+
+          ## How it lands
+
+          This PR auto-merges when \`CI / make verify\` goes green (auto-merge is
+          already enabled on it). On merge, \`bump-release-tag.yml\` tags
+          \`v<desktop-version>\` and dispatches \`release.yml\`; the packaged smoke
+          test gates \`latest.json\`, so a server that boots broken never reaches
+          the updater.
+
+          If CI goes red, nothing merges — fix by pushing to
+          \`automation/paperclip-server-bump\` or close this PR and the workflow
+          will re-open it on the next run.
+
+          _Generated by \`server-version-check.yml\`._
+          EOF
+          )
+
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr edit "$PR_NUMBER" --title "chore: bump @paperclipai/server to $LATEST" --body "$BODY"
+            gh pr comment "$PR_NUMBER" --body "Rebased onto latest \`$DEFAULT\`; target version is now \`$LATEST\`."
+          else
+            PR_NUMBER=$(gh pr create --base "$DEFAULT" --head "$BUMP_BRANCH" \
+              --title "chore: bump @paperclipai/server to $LATEST" --body "$BODY" \
+              | grep -oE '[0-9]+$')
+          fi
+
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "::notice::Bump PR: #$PR_NUMBER"
+
+          # Belt and suspenders: with GITHUB_TOKEN-authored pushes GitHub does
+          # not fire pull_request events, so dispatch CI on the branch
+          # explicitly. Harmless when BUMP_TOKEN already triggered it.
+          gh workflow run ci.yml --ref "$BUMP_BRANCH" || true
+
+          # Merge only once required checks pass; ignored when the repo lacks
+          # auto-merge (the PR then waits for a human — same as before).
+          gh pr merge "$PR_NUMBER" --auto --squash || \
+            echo "::warning::Auto-merge unavailable — merge manually once CI passes."
+
+      - name: Update the rolling tracking issue
+        if: always()
+        env:
+          LATEST: ${{ steps.versions.outputs.latest }}
+          PINNED: ${{ steps.versions.outputs.pinned }}
+          BEHIND: ${{ steps.versions.outputs.behind }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          set -euo pipefail
+          MARKER="<!-- server-version-check -->"
+          # No author filter: the issue may have been opened by GITHUB_TOKEN
+          # (app/github-actions) or by BUMP_TOKEN (a PAT user) — filtering on
+          # the author would miss the latter and open a duplicate every run.
+          ISSUE_NUM=$(gh issue list --search "in:title \"@paperclipai/server version drift\"" \
+            --state open --json number --jq '.[0].number // ""')
+
+          if [ "$BEHIND" = "true" ]; then
+            BODY="$MARKER
+          The pinned \`@paperclipai/server\` is behind npm latest.
+
+          | | version |
+          |---|---|
+          | pinned | \`$PINNED\` |
+          | latest | \`$LATEST\` |
+          ${PR_NUMBER:+
+          A bump is in flight: **PR #$PR_NUMBER** (auto-merges once \`CI / make verify\` is green).
+          }
+          Fallback, if the PR route is blocked — bump \`@paperclipai/server\` plus every
+          \`@paperclipai/adapter-*\` dependency in \`adapters/*/package.json\` to \`$LATEST\`
+          (they must move together), run \`pnpm install\`, \`make clean-bundle && make verify\`,
+          then merge. Tag \`v<desktop-version>\` afterwards so \`release.yml\` runs.
+
+          _Updated by the daily \`server-version-check\` workflow._"
+
+            if [ -n "$ISSUE_NUM" ]; then
+              gh issue edit "$ISSUE_NUM" --body "$BODY"
+            else
+              gh issue create --title "@paperclipai/server version drift" --body "$BODY"
+            fi
+          else
+            # Caught up: close the tracking issue and any stale bump PR.
+            if [ -n "$ISSUE_NUM" ]; then
+              gh issue close "$ISSUE_NUM" --comment "Caught up — pinned version is now npm latest."
+            fi
+            STALE=$(gh pr list --head "$BUMP_BRANCH" --state open --json number --jq '.[0].number // ""')
+            if [ -n "$STALE" ]; then
+              gh pr close "$STALE" --comment "Obsolete — pinned version already matches npm latest."
+            fi
           fi

@@ -197,19 +197,30 @@ exact version from `devDependencies["@paperclipai/server"]` and installs that.
 A desktop build therefore ships the one server it was built and tested against,
 and the same commit always produces the same bundle.
 
-The consequence is that nothing bumps it for you. `tauri-plugin-updater` replaces
-the whole `.app`, and the server inside it is whatever was pinned when that `.app`
-was built — so shipping a newer Paperclip means bumping the pin and cutting a
-release.
+The consequence is that `tauri-plugin-updater` replaces the whole `.app`, and
+the server inside it is whatever was pinned when that `.app` was built — so
+shipping a newer Paperclip means bumping the pin and cutting a release.
 
 ```sh
 make outdated   # pinned vs. staged vs. installed vs. latest on npm
 ```
 
-To upgrade:
+Bumps are automated end to end. The daily `server-version-check` workflow
+detects drift and maintains a rolling `automation/paperclip-server-bump` PR
+built by `scripts/bump-paperclip-server.mjs` — it moves the server pin, every
+adapter `@paperclipai/*` pin, and the desktop patch version together (the
+updater compares the app version, so a server bump without a desktop version
+bump would never reach installed clients). The PR auto-merges once `CI /
+make verify` is green; on merge, `bump-release-tag.yml` tags
+`v<desktop-version>` and dispatches `release.yml`, where the packaged smoke
+test gates `latest.json`. The same workflow keeps the version-drift issue
+open as a fallback paper trail.
+
+To upgrade by hand instead:
 
 ```sh
-pnpm add -D @paperclipai/server@<version>
+node scripts/bump-paperclip-server.mjs <version>   # or pnpm add -D @paperclipai/server@<version>
+pnpm install
 make clean-bundle && make verify && make dist
 ```
 

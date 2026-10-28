@@ -1,0 +1,86 @@
+name: Tag Server Bump Releases
+
+# The last hop of the automation. A merged bump commit already carries the
+# patch-bumped desktop `version`; this workflow turns that into the `v*` tag
+# `release.yml` builds from, and dispatches the release explicitly (a
+# GITHUB_TOKEN push cannot be trusted to fire the tag trigger — GitHub
+# suppresses workflow events from the default token).
+#
+# Trigger discipline: it only acts when the head commit is a server bump —
+# either the automation's squash-merged PR (`chore: bump @paperclipai/server`)
+# or an explicit dispatch. Ordinary feature merges never pass the guard, so
+# the tag cadence stays bound to server bumps, not to every commit on master.
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit to tag (defaults to master HEAD)
+        required: false
+
+permissions:
+  contents: write # create + push the tag
+  actions: write # dispatch release.yml
+
+jobs:
+  tag:
+    name: Tag v<desktop-version> and release
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.sha || github.sha }}
+
+      - name: Decide whether this commit is a server bump
+        id: bump
+        run: |
+          set -euo pipefail
+          SUBJECT=$(git log -1 --pretty=%s)
+          echo "Head commit: $SUBJECT"
+
+          # Dispatch is an explicit human decision — always proceeds. Push
+          # events only proceed when the merged commit is the bump automation's
+          # (or a manual bump with the same message).
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "is_bump=true" >> "$GITHUB_OUTPUT"
+          elif echo "$SUBJECT" | grep -qE '^chore: bump @paperclipai/server'; then
+            echo "is_bump=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_bump=false" >> "$GITHUB_OUTPUT"
+            echo "Not a server bump — nothing to tag."
+          fi
+
+      - name: Create the tag and dispatch the release
+        if: steps.bump.outputs.is_bump == 'true'
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p 'require("./package.json").version')
+          TAG="v$VERSION"
+          SHA=$(git rev-parse HEAD)
+
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists — reusing it."
+          else
+            if gh api "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG" >/dev/null 2>&1; then
+              echo "Tag $TAG already exists on origin — reusing it."
+            else
+              gh api "repos/$GITHUB_REPOSITORY/git/refs" \
+                -f ref="refs/tags/$TAG" -f sha="$SHA"
+              echo "Created tag $TAG at ${SHA:0:8}."
+            fi
+          fi
+
+          # Dispatch rather than trusting the tag push to trigger release.yml:
+          # GITHUB_TOKEN pushes suppress workflow events. `--ref` only picks
+          # the workflow file's ref — the `ref` INPUT still defaults to
+          # master, so it must be passed explicitly or the build targets the
+          # wrong commit and the publish job skips.
+          gh workflow run release.yml --ref "$TAG" -f ref="$TAG"
+          echo "::notice::Release pipeline dispatched for $TAG"

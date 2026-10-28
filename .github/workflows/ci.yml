@@ -1,0 +1,62 @@
+name: CI
+
+# The verification gate for pull requests. This is what the bump automation
+# waits on before a server bump may merge — the pin in package.json exists so
+# every build ships a *tested* server, and this job is the "tested" part.
+#
+# Skips the root `pnpm install` on purpose: `make verify` exercises cargo plus
+# the adapter and packaging tests, none of which read the 850 MB server
+# dependency tree. Each adapter has its own lockfile and gets installed
+# individually.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: make verify
+    runs-on: macos-latest
+    env:
+      # `.cargo/config.toml` points at the JFrog mirror; this is the
+      # credential for it. See release.yml for the same note.
+      CARGO_REGISTRIES_ARTIFACTORY_TOKEN: ${{ secrets.CARGO_REGISTRIES_ARTIFACTORY_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install adapter dependencies
+        run: |
+          set -euo pipefail
+          for dir in adapters/*/; do
+            if [ -f "${dir}pnpm-lock.yaml" ]; then
+              pnpm --dir "${dir%/}" install --frozen-lockfile
+            fi
+          done
+
+      - name: Verify
+        run: make verify

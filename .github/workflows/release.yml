@@ -7,6 +7,12 @@ name: Release Desktop
 # `bundle.resources` path plus symlink restoration — tracked, not done.
 
 on:
+  # Pushing `v*` is the automated path: bump-release-tag.yml creates the tag
+  # when a server bump merges, and this pipeline builds it.
+  push:
+    tags:
+      - "v*"
+  # Manual path stays: dispatch on a tag builds+releases, on master builds only.
   workflow_dispatch:
     inputs:
       ref:
@@ -27,7 +33,8 @@ jobs:
     runs-on: macos-latest
     environment: release
     env:
-      RELEASE_REF: ${{ github.event.inputs.ref || 'master' }}
+      # `vX.Y.Z` on a tag push, the dispatch input otherwise.
+      RELEASE_REF: ${{ github.event_name == 'push' && github.ref_name || github.event.inputs.ref || 'master' }}
       # `.cargo/config.toml` in the repo points at the JFrog mirror; this is the
       # credential for it. Cargo reads it because the checked-in config, unlike a
       # developer's global one, declares no credential-provider.
@@ -149,6 +156,17 @@ jobs:
               | while read -r lib; do codesign --verify --verbose=1 "$lib"; done
           done
 
+      # The last gate between "compiled" and "published": boot the signed .app
+      # against a throwaway home and require the bundled server to report
+      # healthy. Compiles-but-doesn't-boot servers (migrations, missing payload)
+      # must die here — after this step the only thing left is publish.
+      # arm64 only: it is the runner's native arch, and it exercises the same
+      # server payload x64 ships.
+      - name: Smoke test the packaged app
+        run: |
+          node scripts/smoke-test-packaged-macos.mjs \
+            --app "src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Paperclip Desktop.app"
+
       - name: Build the updater manifest
         run: |
           VERSION=$(node -p "require('./package.json').version")
@@ -175,9 +193,15 @@ jobs:
 
   publish-release:
     name: Publish GitHub release
-    if: startsWith(github.event.inputs.ref, 'v') || startsWith(github.event.inputs.ref, 'refs/tags/v')
+    # Tag pushes always publish; dispatches only publish when the ref is a tag.
+    if: >-
+      github.event_name == 'push' ||
+      startsWith(github.event.inputs.ref, 'v') ||
+      startsWith(github.event.inputs.ref, 'refs/tags/v')
     needs: build-mac
     runs-on: ubuntu-latest
+    env:
+      RELEASE_REF: ${{ github.event_name == 'push' && github.ref_name || github.event.inputs.ref || 'master' }}
 
     steps:
       - uses: actions/download-artifact@v4
@@ -190,7 +214,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          tag="${{ github.event.inputs.ref }}"
+          tag="${{ env.RELEASE_REF }}"
           tag="${tag#refs/tags/}"
 
           mapfile -d '' files < <(find dist-artifacts -type f -print0 | sort -z)
