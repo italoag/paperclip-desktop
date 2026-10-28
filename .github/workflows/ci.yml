@@ -28,6 +28,12 @@ jobs:
       # `.cargo/config.toml` points at the JFrog mirror; this is the
       # credential for it. See release.yml for the same note.
       CARGO_REGISTRIES_ARTIFACTORY_TOKEN: ${{ secrets.CARGO_REGISTRIES_ARTIFACTORY_TOKEN }}
+      # pnpm-workspace.yaml carries an explicit `allowBuilds` allowlist, which
+      # makes pnpm ≥10 treat unlisted build scripts (opencode-ai, protobufjs)
+      # as a hard error. Softening to a warning keeps the allowlist — those
+      # scripts stay ignored at root level, which is safe: the bundled
+      # server's own dependencies install via npm inside prepare-server.
+      PNPM_CONFIG_STRICT_DEP_BUILDS: "false"
 
     steps:
       - uses: actions/checkout@v4
@@ -40,9 +46,12 @@ jobs:
         with:
           workspaces: src-tauri
 
+      # pnpm ≥10, not 9: this repo's pnpm-workspace.yaml is a config-only
+      # file (overrides + allowBuilds, no `packages:` field) that pnpm 9
+      # cannot even parse — and the overrides it ignores are security pins.
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 12
 
       - uses: actions/setup-node@v4
         with:

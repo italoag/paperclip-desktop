@@ -443,7 +443,7 @@ guarantee that motivated it.
 2. **`ci.yml`** — runs `make verify` on every pull request. The bump PR
    auto-merges only when this is green; red CI leaves the PR open for a
    human, which is exactly the old manual path.
-3. **`bump-release-tag.yml`** — on a merge to `master` whose head commit is
+3. **`bump-release-tag.yml`** — on a merge to `main` whose head commit is
    a server bump (`chore: bump @paperclipai/server …`), creates
    `v<desktop-version>` via the API and dispatches `release.yml`. The
    dispatch is deliberate: `GITHUB_TOKEN` pushes suppress workflow events,
@@ -456,13 +456,37 @@ guarantee that motivated it.
 
 ### Required repository setup
 
-- A `BUMP_TOKEN` secret (PAT or GitHub App token). With the default
-  `GITHUB_TOKEN`, pushes and PRs do not trigger other workflows; the
-  workflow degrades gracefully (CI is dispatched on the branch explicitly),
-  but a real token is the reliable path.
+Secrets the pipelines consume (repo scope; `release` environment also works
+for the Apple/TAURI ones because `build-mac` declares `environment: release`):
+
+| Secret | Used by | Purpose |
+|---|---|---|
+| `MAC_CERTIFICATE_P12_BASE64` + `MAC_CERTIFICATE_PASSWORD` | `release.yml` | Apple code-signing certificate, base64 p12 |
+| `APPLE_CODESIGN_IDENTITY` | `release.yml` | signing identity name |
+| `APPLE_ID` + `APPLE_APP_SPECIFIC_PASSWORD` + `APPLE_TEAM_ID` | `release.yml` | inline Tauri notarization — without them the build succeeds but ships un-notarised (Gatekeeper blocks it) |
+| `TAURI_SIGNING_PRIVATE_KEY` + `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | `release.yml` | minisign signature for `latest.json`; the matching public key is embedded in `tauri.conf.json` |
+| `CARGO_REGISTRIES_ARTIFACTORY_TOKEN` | `ci.yml`, `release.yml` | auth for the JFrog crates mirror in `.cargo/config.toml` |
+| `BUMP_TOKEN` | `server-version-check.yml`, `bump-release-tag.yml` | PAT or GitHub App token. With the default `GITHUB_TOKEN`, pushes and PRs do not trigger other workflows; the automation degrades gracefully (CI is dispatched on the branch explicitly), but a real token is the reliable path |
+
+Settings:
+
 - "Allow auto-merge" enabled in the repository settings.
-- The `CI` check required in the default-branch protection rules — without
-  it, auto-merge does not wait for `make verify`.
+- The `CI / make verify` check required in the default-branch protection
+  rules — without it, auto-merge does not wait for `make verify`.
+
+Tooling pins:
+
+- pnpm is pinned to **12** in every workflow. Do not lower it: the repo's
+  `pnpm-workspace.yaml` is a config-only file (`overrides`, `allowBuilds`,
+  `minimumReleaseAgeExclude`, no `packages:`) that pnpm 9 cannot parse, and
+  regenerating the lockfile under pnpm 9 would silently drop the security
+  `overrides`.
+- Every pnpm job sets `PNPM_CONFIG_STRICT_DEP_BUILDS=false`: the explicit
+  `allowBuilds` allowlist otherwise turns unlisted build scripts
+  (`opencode-ai`, `protobufjs`) into hard install errors. Their scripts stay
+  skipped at root level on purpose — the bundled server's real dependency
+  tree installs via `npm install` inside `prepare-server.mjs` staging, where
+  npm's normal script handling applies.
 
 ### Failure modes and recovery
 

@@ -13,35 +13,35 @@ name = "paperclip_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.6.3", registry = "artifactory", features = ["codegen"] }
+tauri-build = { version = "2.6.3", features = ["codegen"] }
 
 [dependencies]
-log = { version = "0.4.33", registry = "artifactory" }
-reqwest = { version = "0.13.3", registry = "artifactory", default-features = false, features = ["json", "charset", "http2", "system-proxy", "native-tls"] }
-serde = { version = "1.0.229", registry = "artifactory", features = ["derive"] }
-serde_json = { version = "1.0.151", registry = "artifactory" }
-tauri = { version = "2.11.5", registry = "artifactory", features = ["devtools"] }
-tauri-plugin-dialog = { version = "2.7.2", registry = "artifactory" }
-tauri-plugin-log = { version = "2.9.0", registry = "artifactory" }
-tauri-plugin-opener = { version = "2.5.4", registry = "artifactory" }
-tauri-plugin-single-instance = { version = "2.4.3", registry = "artifactory" }
-tauri-plugin-updater = { version = "2.10.1", registry = "artifactory", default-features = false, features = ["native-tls", "zip"] }
-thiserror = { version = "2.0.20", registry = "artifactory" }
-time = { version = "0.3.41", registry = "artifactory", features = ["formatting", "parsing", "macros"] }
-tokio = { version = "1.53.1", registry = "artifactory", features = ["rt-multi-thread", "macros", "process", "io-util", "time", "net", "sync", "fs", "signal"] }
-url = { version = "2.5.8", registry = "artifactory" }
-uuid = { version = "1.20.0", registry = "artifactory", features = ["v4", "v5"] }
+log = { version = "0.4.33" }
+reqwest = { version = "0.13.3", default-features = false, features = ["json", "charset", "http2", "system-proxy", "native-tls"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.151" }
+tauri = { version = "2.11.5", features = ["devtools"] }
+tauri-plugin-dialog = { version = "2.7.2" }
+tauri-plugin-log = { version = "2.9.0" }
+tauri-plugin-opener = { version = "2.5.4" }
+tauri-plugin-single-instance = { version = "2.4.3" }
+tauri-plugin-updater = { version = "2.10.1", default-features = false, features = ["native-tls", "zip"] }
+thiserror = { version = "2.0.20" }
+time = { version = "0.3.41", features = ["formatting", "parsing", "macros"] }
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "process", "io-util", "time", "net", "sync", "fs", "signal"] }
+url = { version = "2.5.8" }
+uuid = { version = "1.20.0", features = ["v4", "v5"] }
 
 [target."cfg(unix)".dependencies]
-libc = { version = "0.2.189", registry = "artifactory" }
+libc = { version = "0.2.189" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2 = { version = "0.6.4", registry = "artifactory" }
-objc2-web-kit = { version = "0.3.2", registry = "artifactory" }
+objc2 = { version = "0.6.4" }
+objc2-web-kit = { version = "0.3.2" }
 
 [dev-dependencies]
-tempfile = { version = "3.27.0", registry = "artifactory" }
-wiremock = { version = "0.6.5", registry = "artifactory" }
+tempfile = { version = "3.27.0" }
+wiremock = { version = "0.6.5" }
 
 # Optimised for size. The shell spends its life waiting on I/O and a child
 # process, so trading a little throughput for a smaller binary is free in

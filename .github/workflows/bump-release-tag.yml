@@ -9,16 +9,16 @@ name: Tag Server Bump Releases
 # Trigger discipline: it only acts when the head commit is a server bump —
 # either the automation's squash-merged PR (`chore: bump @paperclipai/server`)
 # or an explicit dispatch. Ordinary feature merges never pass the guard, so
-# the tag cadence stays bound to server bumps, not to every commit on master.
+# the tag cadence stays bound to server bumps, not to every commit on main.
 
 on:
   push:
     branches:
-      - master
+      - main
   workflow_dispatch:
     inputs:
       sha:
-        description: Commit to tag (defaults to master HEAD)
+        description: Commit to tag (defaults to the triggering HEAD)
         required: false
 
 permissions:
@@ -80,7 +80,7 @@ jobs:
           # Dispatch rather than trusting the tag push to trigger release.yml:
           # GITHUB_TOKEN pushes suppress workflow events. `--ref` only picks
           # the workflow file's ref — the `ref` INPUT still defaults to
-          # master, so it must be passed explicitly or the build targets the
+          # main, so it must be passed explicitly or the build targets the
           # wrong commit and the publish job skips.
           gh workflow run release.yml --ref "$TAG" -f ref="$TAG"
           echo "::notice::Release pipeline dispatched for $TAG"

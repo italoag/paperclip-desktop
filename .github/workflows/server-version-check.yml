@@ -40,6 +40,10 @@ jobs:
       # below, which does not require a PAT).
       GH_TOKEN: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
       BUMP_BRANCH: automation/paperclip-server-bump
+      # With an explicit `allowBuilds` allowlist, pnpm ≥10 fails installs that
+      # hit unlisted build scripts (opencode-ai, protobufjs). A warning is
+      # enough here — this job only regenerates lockfiles, nothing is built.
+      PNPM_CONFIG_STRICT_DEP_BUILDS: "false"
 
     steps:
       - uses: actions/checkout@v4
@@ -49,9 +53,12 @@ jobs:
           # the push triggers the PR-open CI run by itself.
           token: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
 
+      # pnpm ≥10: pnpm 9 cannot parse this repo's config-only
+      # pnpm-workspace.yaml — and would silently drop the security
+      # `overrides` it carries when regenerating the lockfile.
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 12
 
       - uses: actions/setup-node@v4
         with:

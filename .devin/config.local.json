@@ -75,7 +75,13 @@
       "Exec(PAPERCLIP_DEVIN_COMMAND=/nonexistent-devin node)",
       "Exec(git)",
       "Exec(ruby)",
-      "Exec(LATEST=2026.1023.0 PINNED=2026.817.0 DEFAULT=master BUMP_BRANCH=automation/paperclip-server-bump PR_NUMBER= bash)"
+      "Exec(LATEST=2026.1023.0 PINNED=2026.817.0 DEFAULT=master BUMP_BRANCH=automation/paperclip-server-bump PR_NUMBER= bash)",
+      "Exec(gh secret)",
+      "Exec(gh api)",
+      "Exec(gh run)",
+      "Exec(security find-identity)",
+      "Exec(npm_config_strict_dep_builds=false pnpm install)",
+      "Exec(cargo)"
     ]
   }
 }

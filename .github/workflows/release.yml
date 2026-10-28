@@ -12,13 +12,13 @@ on:
   push:
     tags:
       - "v*"
-  # Manual path stays: dispatch on a tag builds+releases, on master builds only.
+  # Manual path stays: dispatch on a tag builds+releases, on a branch builds only.
   workflow_dispatch:
     inputs:
       ref:
         description: Git ref to build
         required: false
-        default: master
+        default: main
 
 permissions:
   contents: write
@@ -34,11 +34,17 @@ jobs:
     environment: release
     env:
       # `vX.Y.Z` on a tag push, the dispatch input otherwise.
-      RELEASE_REF: ${{ github.event_name == 'push' && github.ref_name || github.event.inputs.ref || 'master' }}
+      RELEASE_REF: ${{ github.event_name == 'push' && github.ref_name || github.event.inputs.ref || 'main' }}
       # `.cargo/config.toml` in the repo points at the JFrog mirror; this is the
       # credential for it. Cargo reads it because the checked-in config, unlike a
       # developer's global one, declares no credential-provider.
       CARGO_REGISTRIES_ARTIFACTORY_TOKEN: ${{ secrets.CARGO_REGISTRIES_ARTIFACTORY_TOKEN }}
+      # The explicit `allowBuilds` allowlist in pnpm-workspace.yaml makes
+      # pnpm ≥10 fail on unlisted build scripts (opencode-ai, protobufjs).
+      # A warning suffices at this level: the server's real dependency tree —
+      # including those packages — is installed by `npm install` inside
+      # prepare-server staging, where no pnpm gate applies.
+      PNPM_CONFIG_STRICT_DEP_BUILDS: "false"
 
     steps:
       - uses: actions/checkout@v4
@@ -53,9 +59,12 @@ jobs:
         with:
           workspaces: src-tauri
 
+      # pnpm ≥10, not 9: pnpm 9 cannot parse this repo's config-only
+      # pnpm-workspace.yaml (it has overrides/allowBuilds but no `packages:`
+      # field) — the first release run died exactly here.
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 12
 
       - uses: actions/setup-node@v4
         with:
@@ -201,7 +210,7 @@ jobs:
     needs: build-mac
     runs-on: ubuntu-latest
     env:
-      RELEASE_REF: ${{ github.event_name == 'push' && github.ref_name || github.event.inputs.ref || 'master' }}
+      RELEASE_REF: ${{ github.event_name == 'push' && github.ref_name || github.event.inputs.ref || 'main' }}
 
     steps:
       - uses: actions/download-artifact@v4
